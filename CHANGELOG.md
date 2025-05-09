@@ -26,11 +26,11 @@ All notable, unreleased changes to this project will be documented in this file.
 - Dropped the deprecated "Stripe (Deprecated)" payment plugin. If your codebase refers to `mirumee.payments.stripe`, you will need to migrate to the supported plugin, `saleor.payments.stripe` - #17539 by @patrys
 - Change error codes related to user enumeration bad habbit. Included mutations will now not reveal information in error codes if email was already registered:
   - `AccountRegister`,
-    `AccountRegister` mutation will additionaly not return `ID` of the user.
   - `ConfirmAccount`,
   - `RequestPasswordReset`,
-    `RequestPasswordReset` will now require `channel` as input for staff users,
   - `SetPassword` - #16243 by @kadewu
+- `AccountRegister` mutation will not return `ID` of the user. - #16243 by @kadewu
+- `RequestPasswordReset` will not fail if `channel` was not provided for non-staff users. - #17540 by @kadewu
 - Require `MANAGE_ORDERS` for updating order and order line metadata - #17223 by @IKarbowiak
   - The `updateMetadata` for `Order` and `OrderLine` types requires the `MANAGE_ORDERS` permission
 - Fix updating `metadata` and `privateMetadata` in `transactionUpdate` - #17261 by @IKarbowiak
@@ -43,6 +43,8 @@ All notable, unreleased changes to this project will be documented in this file.
 - Drop `change_user_address` method from plugin manager - #17495 by @IKarbowiak
 - `DraftOrderUpdate` do not call `DRAFT_ORDER_UPDATED` anymore in case nothing changed - #17532 by @IKarbowiak
 - `OrderUpdate` mutation do not call `ORDER_UPDATED` anymore in case nothing changed - #17507 by @IKarbowiak
+- The `transactionId` argument of `OrderGrantRefundCreateInput` is now required - #17635 by @IKarbowiak
+- Google Cloud Platform (GCP): the environment variable for private storage (e.g., webhook event delivery payloads) was renamed from `GS_MEDIA_BUCKET_NAME` to `GS_MEDIA_PRIVATE_BUCKET_NAME` - #17660 by @bnkwines
 
 ### GraphQL API
 
@@ -69,18 +71,24 @@ All notable, unreleased changes to this project will be documented in this file.
 - Expose line-level discounts through the `OrderLineDiscount` type, retrievable via the `OrderLine.discounts` API field - #17510 by @korycins
 - Introduce total field in OrderDiscount to replace the amount field, with OrderDiscount.amount now deprecated - #17510 by @korycins
 - Introduce `useLegacyLineVoucherPropagation` flag to control legacy propagation behavior for specific voucher types - #17587 - by @korycins
+- Add filterable subscriptions for checkout events (`checkoutCreated`, `checkoutUpdated`, `checkoutFullyPaid`, `checkoutMetadataUpdated`) - #17647 by @korycins
+
 
 ### Webhooks
 
 - Fixed webhookTrigger payload type for events related to ProductVariant - #16956 by @delemeator
-- Truncate lenghty responses in `EventDeliveryAttempt` objects - #17044 by @wcislo-saleor
+- Truncate lengthy responses in `EventDeliveryAttempt` objects - #17044 by @wcislo-saleor
 - Webhooks `CHECKOUT_FILTER_SHIPPING_METHODS` & `ORDER_FILTER_SHIPPING_METHODS` are no longer executed when not needed (no available shipping methods, e.g. due to lack of shipping address) - #17328 by @lkostrowski
 - New feature: sync webhooks circuit breaker - #16658 by @tomaszszymanski129
 - Fixed webhook `PRODUCT_VARIANT_METADATA_UPDATED` not being sent when `productVariantUpdate` mutation was called. Now, when `metadata` or `privateMetadata` is included in `ProductVariantUpdateInput`, both `PRODUCT_VARIANT_METADATA_UPDATED` and `PRODUCT_VARIANT_UPDATED` will be emitted (if subscribed) - #17406 by @lkostrowski
 - Update Draft Order shipping via `orderUpdateShipping` will emit `DRAFT_ORDER_UPDATED` webhook. Previously it was `ORDER_UPDATED` - #17480 by @lkostrowski
 - Update editable Order shipping via `orderUpdateShipping` will emit `ORDER_UPDATED` webhook when `shippingMethod` will be cleared (by passing `null` to graphQL input). - #17480 by @lkostrowski
+- Webhook `TRANSACTION_CANCELATION_REQUESTED` now provides a decimal value in the action.amount field instead of null - #17690 by @korycins
+- `TransactionAction.amount` field in subscription payload for webhooks: `TransactionRefundRequested`, `TransactionChargeRequested`, `TransactionCancelationRequested`, is now a non-null field - #17690 by @korycins
+- Field `amount` in the response for synchronous webhooks: `TRANSACTION_CHARGE_REQUESTED`, `TRANSACTION_REFUND_REQUESTED`, `TRANSACTION_CANCELATION_REQUESTED`, `TRANSACTION_INITIALIZE_SESSION`, `TRANSACTION_PROCESS_SESSION` is now optional field. If omitted, the system will default to using the `action.amount` specified in the payload. - #17690 by @korycins
 
 ### Other changes
+- Fixed outdated documentation links - #17675 by @krzysztofwolski
 - Added support for numeric and lower-case boolean environment variables - #16313 by @NyanKiyoshi
 - Fixed a potential crash when Checkout metadata is accessed with high concurrency - #16411 by @patrys
 - Add slugs to product/category/collection/page translations. Allow to query by translated slug - #16449 by @delemeator
@@ -114,3 +122,5 @@ All notable, unreleased changes to this project will be documented in this file.
 - Fixes incorrect gift card balances after covering the full order total - #17566 by @korycins
 - Fixes tax class not clearing when selecting a shipping method without a tax class - #17560 by @korycins
 - The prices for draft orders created in `OrderBulkCreate` now are properly calculated - #17583 by @IKarbowiak
+- Fixes incorrect stock deallocation when multiple order lines share the same ProductVariant - #17657 by @korycins
+- Decrease allocations for lines with inventory tracking disabled, if allocations exist - #17657 by @korycins
