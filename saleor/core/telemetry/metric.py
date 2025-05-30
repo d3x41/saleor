@@ -1,6 +1,6 @@
 import logging
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from enum import Enum
 from threading import Lock
@@ -29,6 +29,26 @@ class MetricType(Enum):
     COUNTER = "counter"
     UP_DOWN_COUNTER = "up_down_counter"
     HISTOGRAM = "histogram"
+
+
+DEFAULT_DURATION_BUCKETS = [
+    0.01,  # 10ms
+    0.025,  # 25ms
+    0.05,  # 50ms
+    0.1,  # 100ms
+    0.2,  # 200ms
+    0.3,  # 300ms
+    0.4,  # 400ms
+    0.6,  # 600ms
+    0.8,  # 800ms
+    1,  # 1s
+    1.5,  # 1.5s
+    2.5,  # 2.5s
+    4,  # 4s
+    7,  # 7s
+    18,  # 18s
+    30,  # 30s
+]
 
 
 def get_instrument_method(
@@ -70,14 +90,19 @@ class Meter:
         type: MetricType,
         unit: Unit,
         description: str,
+        bucket_boundaries: Sequence[float] | None = None,
     ) -> Synchronous:
-        kwargs = {"unit": unit.value, "description": description}
         if type == MetricType.COUNTER:
-            return otel_meter.create_counter(name, **kwargs)
+            return otel_meter.create_counter(name, unit.value, description)
         if type == MetricType.UP_DOWN_COUNTER:
-            return otel_meter.create_up_down_counter(name, **kwargs)
+            return otel_meter.create_up_down_counter(name, unit.value, description)
         if type == MetricType.HISTOGRAM:
-            return otel_meter.create_histogram(name, **kwargs)
+            return otel_meter.create_histogram(
+                name,
+                unit.value,
+                description,
+                explicit_bucket_boundaries_advisory=bucket_boundaries,
+            )
         raise AttributeError(f"Unsupported instrument type: {type}")
 
     def create_metric(
@@ -88,6 +113,7 @@ class Meter:
         unit: Unit,
         scope: Scope = Scope.CORE,
         description: str = "",
+        bucket_boundaries: Sequence[float] | None = None,
     ) -> str:
         """Create a new metric with specified parameters.
 
@@ -97,6 +123,7 @@ class Meter:
             unit: Unit of the metric
             scope: The scope of the metric, defaults to Scope.CORE
             description: Optional description of the metric
+            bucket_boundaries: For MetricType.HISTOGRAM metrics, optional explicit bucket boundaries advisory
 
         Returns:
             str: The name of the created metric
@@ -106,7 +133,9 @@ class Meter:
         with self._lock:
             if name in self._instruments:
                 raise DuplicateMetricError(name)
-            instrument = self._create_instrument(meter, name, type, unit, description)
+            instrument = self._create_instrument(
+                meter, name, type, unit, description, bucket_boundaries
+            )
             self._instruments[name] = unit, instrument
         return name
 
@@ -135,9 +164,12 @@ class Meter:
         return get_instrument_method(instrument)(amount, attributes)
 
     @contextmanager
-    def record_duration(self, metric_name: str) -> Iterator[dict[str, AttributeValue]]:
+    def record_duration(
+        self, metric_name: str, attributes: dict[str, AttributeValue] | None = None
+    ) -> Iterator[dict[str, AttributeValue]]:
         start = time.monotonic_ns()
-        attributes: dict[str, AttributeValue] = {}
+        if attributes is None:
+            attributes = {}
         try:
             yield attributes
         finally:
@@ -175,12 +207,14 @@ class MeterProxy(Meter):
         unit: Unit,
         scope: Scope = Scope.CORE,
         description: str = "",
+        bucket_boundaries: Sequence[float] | None = None,
     ) -> str:
         kwargs = {
             "type": type,
             "unit": unit,
             "scope": scope,
             "description": description,
+            "bucket_boundaries": bucket_boundaries,
         }
         if self._meter:
             return self._meter.create_metric(
@@ -189,6 +223,7 @@ class MeterProxy(Meter):
                 unit=unit,
                 scope=scope,
                 description=description,
+                bucket_boundaries=bucket_boundaries,
             )
         with self._lock:
             if name in self._metrics:

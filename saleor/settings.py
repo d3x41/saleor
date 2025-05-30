@@ -30,6 +30,7 @@ from . import PatchedSubscriberExecutionContext, __version__
 from .account.i18n_rules_override import i18n_rules_override
 from .core.db.patch import patch_db
 from .core.languages import LANGUAGES as CORE_LANGUAGES
+from .core.rlimit import validate_and_set_rlimit
 from .core.schedules import initiated_promotion_webhook_schedule
 from .graphql.executor import patch_executor
 from .graphql.promise import patch_promise
@@ -61,6 +62,13 @@ def get_url_from_env(name, *, schemes=None) -> str | None:
         return value
     return None
 
+
+# Possibility to set memory limits for the process. Function `validate_and_set_rlimit` set the
+# maximum size of the process's heap(`resource.RLIMIT_DATA`). If you set the memory limit and process will try to
+# allocate more memory than the limit, it will raise `MemoryError`.
+SOFT_MEMORY_LIMIT_IN_MB = os.environ.get("SOFT_MEMORY_LIMIT_IN_MB", None)
+HARD_MEMORY_LIMIT_IN_MB = os.environ.get("HARD_MEMORY_LIMIT_IN_MB", None)
+validate_and_set_rlimit(SOFT_MEMORY_LIMIT_IN_MB, HARD_MEMORY_LIMIT_IN_MB)
 
 DEBUG = get_bool_from_env("DEBUG", True)
 
@@ -441,7 +449,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 DEFAULT_COUNTRY: str = os.environ.get("DEFAULT_COUNTRY", "US")
 DEFAULT_DECIMAL_PLACES = 3
-DEFAULT_MAX_DIGITS = 12
+DEFAULT_MAX_DIGITS = 20
 DEFAULT_CURRENCY_CODE_LENGTH = 3
 
 # The default max length for the display name of the
@@ -491,7 +499,7 @@ GS_BUCKET_NAME = os.environ.get("GS_BUCKET_NAME")
 GS_LOCATION = os.environ.get("GS_LOCATION", "")
 GS_CUSTOM_ENDPOINT = os.environ.get("GS_CUSTOM_ENDPOINT")
 GS_MEDIA_BUCKET_NAME = os.environ.get("GS_MEDIA_BUCKET_NAME")
-GS_MEDIA_PRIVATE_BUCKET_NAME = os.environ.get("GS_MEDIA_BUCKET_NAME")
+GS_MEDIA_PRIVATE_BUCKET_NAME = os.environ.get("GS_MEDIA_PRIVATE_BUCKET_NAME")
 GS_AUTO_CREATE_BUCKET = get_bool_from_env("GS_AUTO_CREATE_BUCKET", False)
 GS_QUERYSTRING_AUTH = get_bool_from_env("GS_QUERYSTRING_AUTH", False)
 GS_DEFAULT_ACL = os.environ.get("GS_DEFAULT_ACL", None)
@@ -834,7 +842,7 @@ for entry_point in installed_plugins:
             INSTALLED_APPS.append(entry_point.name)
         EXTERNAL_PLUGINS.append(plugin_path)
 
-PLUGINS = BUILTIN_PLUGINS + EXTERNAL_PLUGINS
+PLUGINS: list[str] = BUILTIN_PLUGINS + EXTERNAL_PLUGINS
 
 # When `True`, HTTP requests made from arbitrary URLs will be rejected (e.g., webhooks).
 # if they try to access private IP address ranges, and loopback ranges (unless
@@ -1008,6 +1016,8 @@ ENABLE_LIMITING_WEBHOOKS_FOR_IDENTICAL_PAYLOADS = get_bool_from_env(
 # That setting limits the allowed number of transaction items for single entity.
 TRANSACTION_ITEMS_LIMIT = 100
 
+
+TOKEN_GENERATOR_CLASS = "django.contrib.auth.tokens.PasswordResetTokenGenerator"
 
 # Disable Django warnings regarding too long cache keys being incompatible with
 # memcached to avoid leaking key values.
