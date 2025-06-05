@@ -48,7 +48,7 @@ CHANNEL_CREATE_MUTATION = """
                     allowUnpaidOrders
                     includeDraftOrderInVoucherUsage
                     draftOrderLinePriceFreezePeriod
-                    useLegacyLineVoucherPropagation
+                    useLegacyLineDiscountPropagation
                 }
                 checkoutSettings {
                     useLegacyErrorFlow
@@ -899,9 +899,14 @@ def test_channel_create_set_allow_unpaid_orders(
 
 @pytest.mark.parametrize(
     ("use_legacy_input", "expected_result"),
-    [(True, True), (False, False), (None, False)],
+    [
+        ({"useLegacyLineDiscountPropagation": True}, True),
+        ({"useLegacyLineDiscountPropagation": False}, False),
+        (None, False),
+        ({"allowUnpaidOrders": False}, False),
+    ],
 )
-def test_channel_create_set_use_legacy_line_voucher_propagation(
+def test_channel_create_set_use_legacy_line_discount_propagation(
     use_legacy_input,
     expected_result,
     permission_manage_channels,
@@ -918,7 +923,7 @@ def test_channel_create_set_use_legacy_line_voucher_propagation(
             "slug": slug,
             "currencyCode": currency_code,
             "defaultCountry": default_country,
-            "orderSettings": {"useLegacyLineVoucherPropagation": use_legacy_input},
+            "orderSettings": use_legacy_input,
         }
     }
 
@@ -936,7 +941,7 @@ def test_channel_create_set_use_legacy_line_voucher_propagation(
     channel_data = data["channel"]
     channel = Channel.objects.get()
     assert (
-        channel_data["orderSettings"]["useLegacyLineVoucherPropagation"]
+        channel_data["orderSettings"]["useLegacyLineDiscountPropagation"]
         == expected_result
     )
-    assert channel.use_legacy_line_voucher_propagation_for_order == expected_result
+    assert channel.use_legacy_line_discount_propagation_for_order == expected_result

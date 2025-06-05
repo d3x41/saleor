@@ -48,7 +48,7 @@ CHANNEL_UPDATE_MUTATION = """
                     allowUnpaidOrders
                     includeDraftOrderInVoucherUsage
                     draftOrderLinePriceFreezePeriod
-                    useLegacyLineVoucherPropagation
+                    useLegacyLineDiscountPropagation
                 }
             }
             errors{
@@ -1635,15 +1635,17 @@ def test_channel_update_default_transaction_flow_strategy_with_payment_permissio
 @pytest.mark.parametrize(
     ("use_legacy_input", "expected_result", "current_value_on_db"),
     [
-        (True, True, True),
-        (True, True, False),
-        (False, False, True),
-        (False, False, False),
+        ({"useLegacyLineDiscountPropagation": True}, True, True),
+        ({"useLegacyLineDiscountPropagation": True}, True, False),
+        ({"useLegacyLineDiscountPropagation": False}, False, True),
+        ({"useLegacyLineDiscountPropagation": False}, False, False),
         (None, True, True),
         (None, False, False),
+        ({"allowUnpaidOrders": False}, False, False),
+        ({"allowUnpaidOrders": True}, True, True),
     ],
 )
-def test_channel_update_set_use_legacy_line_voucher_propagation(
+def test_channel_update_set_use_legacy_line_discount_propagation(
     use_legacy_input,
     expected_result,
     current_value_on_db,
@@ -1652,14 +1654,14 @@ def test_channel_update_set_use_legacy_line_voucher_propagation(
     channel_USD,
 ):
     # given
-    channel_USD.use_legacy_line_voucher_propagation_for_order = current_value_on_db
+    channel_USD.use_legacy_line_discount_propagation_for_order = current_value_on_db
     channel_USD.save()
 
     channel_id = graphene.Node.to_global_id("Channel", channel_USD.id)
     variables = {
         "id": channel_id,
         "input": {
-            "orderSettings": {"useLegacyLineVoucherPropagation": use_legacy_input},
+            "orderSettings": use_legacy_input,
         },
     }
 
@@ -1677,7 +1679,7 @@ def test_channel_update_set_use_legacy_line_voucher_propagation(
     channel_data = data["channel"]
     channel_USD.refresh_from_db()
     assert (
-        channel_data["orderSettings"]["useLegacyLineVoucherPropagation"]
+        channel_data["orderSettings"]["useLegacyLineDiscountPropagation"]
         == expected_result
     )
-    assert channel_USD.use_legacy_line_voucher_propagation_for_order == expected_result
+    assert channel_USD.use_legacy_line_discount_propagation_for_order == expected_result

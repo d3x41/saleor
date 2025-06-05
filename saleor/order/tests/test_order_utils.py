@@ -74,6 +74,7 @@ def test_change_quantity_generates_proper_event(
         new_quantity,
         order_with_lines,
         get_plugins_manager(allow_replica=False),
+        allocate_stock=order_with_lines.is_unconfirmed(),
     )
 
     if removed_count:
@@ -317,6 +318,7 @@ def test_add_gift_cards_to_order(
 ):
     # given
     checkout = checkout_with_item
+    checkout.email = staff_user.email
     checkout.user = staff_user
     checkout.gift_cards.add(gift_card, gift_card_expiry_date)
     manager = get_plugins_manager(allow_replica=False)
@@ -372,6 +374,7 @@ def test_add_gift_cards_to_order_with_more_than_total(
     # given
     checkout = checkout_with_item
     checkout.user = staff_user
+    checkout.email = staff_user.email
     checkout.gift_cards.add(gift_card_expiry_date, gift_card)
     manager = get_plugins_manager(allow_replica=False)
     lines, _ = fetch_checkout_lines(checkout)
