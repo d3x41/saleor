@@ -1,27 +1,19 @@
+import datetime
 import hashlib
+import json
 from unittest.mock import MagicMock, patch
 
 import graphene
 import pytest
 from django.test import override_settings
-from opentelemetry.sdk.trace import ReadableSpan
 from opentelemetry.semconv._incubating.attributes import graphql_attributes
 from opentelemetry.trace import StatusCode
+from requests_hardened import HTTPSession
 
 from ...core.telemetry import saleor_attributes
 from ...graphql.api import backend, schema
+from ...tests.utils import filter_spans_by_name, get_span_by_name
 from ..views import GraphQLView
-
-
-def get_spans_by_name(spans, name) -> tuple[ReadableSpan, ...]:
-    return tuple(span for span in spans if span.name == name)
-
-
-def get_span_by_name(spans, name) -> ReadableSpan:
-    filtered = get_spans_by_name(spans, name)
-    assert filtered, f"No span with name '{name}' found"
-    assert len(filtered) == 1, f"Multiple '{name}' spans"
-    return filtered[0]
 
 
 def test_tracing_query_hashing(
@@ -126,7 +118,7 @@ def test_tracing_query_hashing_different_vars_same_checksum(
     # then
     fingerprints = [
         span.attributes[saleor_attributes.GRAPHQL_DOCUMENT_FINGERPRINT]
-        for span in get_spans_by_name(get_test_spans(), query)
+        for span in filter_spans_by_name(get_test_spans(), query)
     ]
     assert len(fingerprints) == QUERIES
     assert len(set(fingerprints)) == 1
@@ -610,3 +602,115 @@ def test_graphql_query_span_set_status_error_cost_exceeded(
     mock_span.set_status.assert_called_once_with(
         status=StatusCode.ERROR, description=expected_error_message
     )
+
+
+def test_trace_context_propagation(
+    trace_context_propagation, user_api_client, get_test_spans
+):
+    # given
+    formatted_trace_id = "d30f57682d56377acf27bbef17042d9a"
+    formatted_parent_span_id = "b63e859130b3cabf"
+    trace_state = "rojo=00f067aa0ba902b7"
+    query = """
+        {
+          shop {
+            name
+          }
+        }
+    """
+
+    # when
+    response = user_api_client.post_graphql(
+        query,
+        headers={
+            "traceparent": f"00-{formatted_trace_id}-{formatted_parent_span_id}-01",
+            "tracestate": trace_state,
+        },
+    )
+
+    # then
+    span = get_span_by_name(get_test_spans(), "/graphql/")
+    assert format(span.context.trace_id, "032x") == formatted_trace_id
+    assert format(span.parent.span_id, "016x") == formatted_parent_span_id
+    assert "traceparent" in response.headers
+    assert "tracestate" in response.headers
+    assert (
+        response.headers["traceparent"]
+        == f"00-{formatted_trace_id}-{format(span.context.span_id, '016x')}-01"
+    )
+    assert response.headers["tracestate"] == trace_state
+
+
+@patch.object(HTTPSession, "request")
+@override_settings(
+    PLUGINS=["saleor.plugins.webhook.plugin.WebhookPlugin"],
+    CHECKOUT_PRICES_TTL=datetime.timedelta(0),
+)
+def test_trace_context_propagation_in_sync_webhook(
+    mock_request,
+    trace_context_propagation,
+    user_api_client,
+    get_test_spans,
+    tax_app,
+    checkout_with_item,
+):
+    # given
+    tax_app_response = {
+        "shipping_tax_rate": "10.00",
+        "shipping_price_gross_amount": "110.00",
+        "shipping_price_net_amount": "100.00",
+        "lines": [
+            {
+                "tax_rate": "20.00",
+                "total_gross_amount": "120.00",
+                "total_net_amount": "100.00",
+            },
+        ],
+    }
+    mock_request.return_value = MagicMock(
+        text=json.dumps(tax_app_response),
+        headers={"response": "header"},
+        elapsed=datetime.timedelta(seconds=1),
+        status_code=200,
+        ok=True,
+    )
+
+    formatted_trace_id = "d30f57682d56377acf27bbef17042d9a"
+    formatted_parent_span_id = "b63e859130b3cabf"
+    trace_state = "rojo=00f067aa0ba902b7"
+
+    query = """
+        query checkout($id: ID!) {
+          checkout(id: $id) {
+            id
+            totalPrice {
+              gross {
+                currency
+                amount
+              }
+            }
+          }
+        }
+    """
+
+    # when
+    user_api_client.post_graphql(
+        query,
+        variables={"id": graphene.Node.to_global_id("Checkout", checkout_with_item.pk)},
+        headers={
+            "traceparent": f"00-{formatted_trace_id}-{formatted_parent_span_id}-01",
+            "tracestate": trace_state,
+        },
+    )
+
+    # then
+    call_headers = mock_request.call_args[1]["headers"]
+    span = get_span_by_name(get_test_spans(), "webhooks.checkout_calculate_taxes")
+    assert format(span.context.trace_id, "032x") == formatted_trace_id
+    assert "traceparent" in call_headers
+    assert "tracestate" in call_headers
+    assert (
+        call_headers["traceparent"]
+        == f"00-{formatted_trace_id}-{format(span.context.span_id, '016x')}-01"
+    )
+    assert call_headers["tracestate"] == trace_state

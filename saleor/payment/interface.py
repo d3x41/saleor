@@ -105,7 +105,7 @@ class PaymentMethodData:
     supported_payment_flows: list[str] = field(default_factory=list)
     credit_card_info: PaymentMethodCreditCardInfo | None = None
     name: str | None = None
-    data: JSONType | None = None
+    data: JSONValue | None = None
 
 
 @dataclass
@@ -114,7 +114,7 @@ class TransactionActionData:
     transaction: TransactionItem
     event: "TransactionEvent"
     transaction_app_owner: Optional["App"]
-    action_value: Decimal | None = None
+    action_value: Decimal
     granted_refund: Optional["OrderGrantedRefund"] = None
 
 
@@ -129,9 +129,18 @@ class TransactionRequestEventResponse:
 
 
 @dataclass
-class TransactionRequestResponse:
+class TransactionResponseBase:
     psp_reference: str | None
-    available_actions: list[str] | None = None
+    available_actions: list[str] | None
+
+
+@dataclass
+class TransactionSessionResponse(TransactionResponseBase):
+    event: TransactionRequestEventResponse
+
+
+@dataclass
+class TransactionRequestResponse(TransactionResponseBase):
     event: Optional["TransactionRequestEventResponse"] = None
 
 
@@ -147,7 +156,7 @@ class TransactionData:
 @dataclass
 class PaymentGatewayData:
     app_identifier: str
-    data: dict[Any, Any] | None = None
+    data: JSONValue | None = None
     error: str | None = None
 
 
@@ -185,7 +194,7 @@ class PaymentMethodTokenizationBaseRequestData:
 @dataclass
 class PaymentMethodTokenizationBaseResponseData:
     error: str | None
-    data: dict | None
+    data: JSONValue | None
 
 
 @dataclass
