@@ -1,5 +1,6 @@
 from decimal import Decimal
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from django.utils import timezone
 
@@ -85,8 +86,20 @@ def filter_where_range_field(qs, field, value):
     return qs.none()
 
 
-def filter_where_by_string_field(
-    qs: "QuerySet", field: str, value: dict[str, str | list[str]]
+def filter_where_by_range_field(qs: "QuerySet", field: str, value: dict):
+    if value is None:
+        return qs.none()
+    gte, lte = value.get("gte"), value.get("lte")
+    if gte is None and lte is None:
+        return qs.none()
+    return filter_range_field(qs, field, value)
+
+
+ValueT = str | UUID
+
+
+def filter_where_by_value_field(
+    qs: "QuerySet", field: str, value: dict[str, ValueT | list[ValueT]]
 ):
     if value is None:
         return qs.none()
@@ -119,6 +132,9 @@ def filter_where_by_numeric_field(
     field: str,
     value: dict[str, Number | list[Number] | dict[str, Number]],
 ):
+    if not value:
+        return qs.none()
+
     one_of = value.get("one_of")
     range = value.get("range")
 
@@ -138,3 +154,15 @@ def filter_where_by_numeric_field(
             qs = qs.filter(**{f"{field}__gte": gte})
         return qs
     return qs.none()
+
+
+def filter_where_by_price_field(qs: "QuerySet", field: str, value: dict) -> "QuerySet":
+    if value is None:
+        return qs.none()
+    if currency := value.get("currency"):
+        qs = qs.filter(currency=currency)
+    return filter_where_range_field(qs, field, value.get("amount", {}))
+
+
+def filter_slug_list(qs, _, values):
+    return qs.filter(slug__in=values)

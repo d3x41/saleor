@@ -1,12 +1,7 @@
-import os
 import re
 from re import Pattern
 
 from django.utils.functional import SimpleLazyObject
-
-# Disable Jaeger tracing should be done before importing settings.
-# without this line pytest will start sending traces to Jaeger agent.
-os.environ["JAEGER_AGENT_HOST"] = ""
 
 from ..settings import *  # noqa: F403
 
@@ -107,3 +102,5 @@ BREAKER_BOARD_ENABLED = False
 # Enable exception raising for telemetry unit conversion errors
 # This helps identify unit conversion issues during development and testing
 TELEMETRY_RAISE_UNIT_CONVERSION_ERRORS = True
+TELEMETRY_TRACER_CLASS = "saleor.core.telemetry.tests.TestTracer"
+TELEMETRY_METER_CLASS = "saleor.core.telemetry.tests.TestMeter"
