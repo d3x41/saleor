@@ -38,7 +38,7 @@ from ...order.utils import (
 from ...payment import ChargeStatus, TransactionKind
 from ...payment.dataloaders import PaymentsByOrderIdLoader
 from ...payment.model_helpers import get_last_payment, get_total_authorized
-from ...permission.auth_filters import AuthorizationFilters
+from ...permission.auth_filters import AuthorizationFilters, is_app, is_staff_user
 from ...permission.enums import (
     AccountPermissions,
     AppPermission,
@@ -1443,7 +1443,7 @@ class OrderLine(
                 # when legacy is disabled, return the voucher discount as
                 # OrderLineDiscount. It is a temporary solution to provide a grace
                 # period for migration
-                use_legacy = channel.use_legacy_line_voucher_propagation_for_order
+                use_legacy = channel.use_legacy_line_discount_propagation_for_order
                 if order.origin != OrderOrigin.CHECKOUT or not use_legacy:
                     return line_discounts
 
@@ -1876,7 +1876,7 @@ class Order(SyncWebhookControlContextModelObjectType[ModelObjectType[models.Orde
             # for backward compatibility, when legacy propagation is enabled
             # we convert the order-line-discounts into single OrderDiscount
             # It is a temporary solution to provide a grace period for migration
-            if not channel.use_legacy_line_voucher_propagation_for_order:
+            if not channel.use_legacy_line_discount_propagation_for_order:
                 return order_discounts
 
             def wrap_order_line(order_lines):
@@ -2293,8 +2293,11 @@ class Order(SyncWebhookControlContextModelObjectType[ModelObjectType[models.Orde
     @staticmethod
     def resolve_fulfillments(root: SyncWebhookControlContext[models.Order], info):
         def _resolve_fulfillments(fulfillments):
-            user = info.context.user
-            if user and user.is_staff:
+            return_all_fulfillments = is_staff_user(info.context) or is_app(
+                info.context
+            )
+
+            if return_all_fulfillments:
                 fulfillments_to_return = fulfillments
             else:
                 fulfillments_to_return = filter(
@@ -2486,11 +2489,17 @@ class Order(SyncWebhookControlContextModelObjectType[ModelObjectType[models.Orde
 
         def _resolve_user_email(user):
             requester = get_user_or_app_from_context(info.context)
+            email_to_return = None
+            if order.user_email:
+                email_to_return = order.user_email
+            elif user:
+                email_to_return = user.email
+
             if order.use_old_id is False or is_owner_or_has_one_of_perms(
                 requester, user, OrderPermissions.MANAGE_ORDERS
             ):
-                return user.email if user else order.user_email
-            return obfuscate_email(user.email if user else order.user_email)
+                return email_to_return
+            return obfuscate_email(email_to_return)
 
         if not order.user_id:
             return _resolve_user_email(None)
@@ -2805,7 +2814,13 @@ class Order(SyncWebhookControlContextModelObjectType[ModelObjectType[models.Orde
         def _resolve_total_refund(data):
             payments, transactions = data
             last_payment = get_last_payment(payments)
-            if last_payment and last_payment.is_active:
+            payment_is_active = last_payment and last_payment.is_active
+            payment_is_fully_refunded = (
+                last_payment
+                and last_payment.charge_status == ChargeStatus.FULLY_REFUNDED
+            )
+
+            if payment_is_active or payment_is_fully_refunded:
                 return (
                     TransactionByPaymentIdLoader(info.context)
                     .load(last_payment.id)

@@ -33,11 +33,14 @@ class Unit(Enum):
     MILLISECOND = "ms"
     NANOSECOND = "ns"
     REQUEST = "{request}"
+    BYTE = "By"
+    COST = "{cost}"
 
 
 UNIT_CONVERSIONS: dict[tuple[Unit, Unit], float] = {
     (Unit.NANOSECOND, Unit.MILLISECOND): 1e-6,
     (Unit.NANOSECOND, Unit.SECOND): 1e-9,
+    (Unit.SECOND, Unit.MILLISECOND): 1e3,
 }
 
 
@@ -96,7 +99,7 @@ class TelemetryTaskContext:
                         "span_id": link.context.span_id,
                         "trace_flags": int(link.context.trace_flags),
                     },
-                    "attributes": link.attributes,
+                    "attributes": dict(link.attributes) if link.attributes else {},
                 }
                 for link in (self.links or [])
             ],
