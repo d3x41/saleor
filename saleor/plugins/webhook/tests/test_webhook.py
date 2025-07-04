@@ -11,7 +11,6 @@ import graphene
 import pytest
 from celery.exceptions import MaxRetriesExceededError
 from celery.exceptions import Retry as CeleryTaskRetryError
-from django.contrib.auth.tokens import default_token_generator
 from django.contrib.sites.models import Site
 from django.core.serializers import serialize
 from freezegun import freeze_time
@@ -30,6 +29,7 @@ from ....core import EventDeliveryStatus
 from ....core.models import EventDelivery, EventDeliveryAttempt, EventPayload
 from ....core.notification.utils import get_site_context
 from ....core.notify import NotifyEventType
+from ....core.tokens import token_generator
 from ....core.utils.url import prepare_url
 from ....discount import DiscountType, DiscountValueType, RewardType, RewardValueType
 from ....discount.interface import VariantPromotionRuleInfo
@@ -1101,7 +1101,7 @@ def test_checkout_payload_includes_promotions(
     variant = checkout_lines[0].variant
     channel_listing = variant.channel_listings.first()
 
-    reward_value = Decimal("5")
+    reward_value = Decimal(5)
     rule = catalogue_promotion_without_rules.rules.create(
         name="Percentage promotion rule",
         catalogue_predicate={
@@ -1166,7 +1166,7 @@ def test_checkout_payload_includes_order_promotion_discount(
     variant = checkout_lines[0].variant
     channel_listing = variant.channel_listings.first()
 
-    reward_value = Decimal("5")
+    reward_value = Decimal(5)
     rule = catalogue_promotion_without_rules.rules.create(
         name="Fixed promotion rule",
         order_predicate={
@@ -1685,7 +1685,7 @@ def test_notify_user(
     redirect_url = "http://redirect.com/"
     send_account_confirmation(customer_user, redirect_url, manager, channel_USD.slug)
 
-    token = default_token_generator.make_token(customer_user)
+    token = token_generator.make_token(customer_user)
     params = urlencode({"email": customer_user.email, "token": token})
     confirm_url = prepare_url(params, redirect_url)
 
@@ -2092,7 +2092,7 @@ def test_transaction_charge_requested(
         available_actions=["capture", "void"],
         currency="USD",
         order_id=order.pk,
-        authorized_value=Decimal("10"),
+        authorized_value=Decimal(10),
         app_identifier=app.identifier,
         app=app,
     )
@@ -2145,7 +2145,7 @@ def test_transaction_refund_requested(
         ],
         currency="USD",
         order_id=order.pk,
-        authorized_value=Decimal("10"),
+        authorized_value=Decimal(10),
         app_identifier=app.identifier,
         app=app,
     )
@@ -2200,7 +2200,7 @@ def test_transaction_refund_requested_missing_app_owner_updated_refundable_for_c
         ],
         currency="USD",
         checkout_id=checkout.pk,
-        authorized_value=Decimal("10"),
+        authorized_value=Decimal(10),
         app_identifier=app.identifier,
         app=app,
     )
@@ -2252,7 +2252,7 @@ def test_transaction_cancel_requested_missing_app_owner_updated_refundable_for_c
         ],
         currency="USD",
         checkout_id=checkout.pk,
-        authorized_value=Decimal("10"),
+        authorized_value=Decimal(10),
         app_identifier=app.identifier,
         app=app,
     )
@@ -2302,7 +2302,7 @@ def test_transaction_cancelation_requested(
         ],
         currency="USD",
         order_id=order.pk,
-        authorized_value=Decimal("10"),
+        authorized_value=Decimal(10),
         app_identifier=app.identifier,
         app=app,
     )
@@ -2451,8 +2451,8 @@ def test_trigger_webhook_sync_with_subscription_within_mutation_use_default_db(
 
     order_discount = draft_order.discounts.create(
         value_type=DiscountValueType.FIXED,
-        value=Decimal("10"),
-        amount_value=Decimal("10"),
+        value=Decimal(10),
+        amount_value=Decimal(10),
         currency=draft_order.currency,
         type=DiscountType.MANUAL,
     )
@@ -2461,7 +2461,7 @@ def test_trigger_webhook_sync_with_subscription_within_mutation_use_default_db(
         "discountId": graphene.Node.to_global_id("OrderDiscount", order_discount.pk),
         "input": {
             "valueType": DiscountValueTypeEnum.PERCENTAGE.name,
-            "value": Decimal("50"),
+            "value": Decimal(50),
         },
     }
 
