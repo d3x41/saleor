@@ -15,7 +15,7 @@ COPY poetry.lock pyproject.toml /app/
 RUN --mount=type=cache,mode=0755,target=/root/.cache/pypoetry poetry install
 
 ### Final image
-FROM python:3.12-slim
+FROM python:3.14.0rc1-slim
 
 RUN groupadd -r saleor && useradd -r -g saleor saleor
 
